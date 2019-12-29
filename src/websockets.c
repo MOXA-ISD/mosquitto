@@ -777,7 +777,15 @@ struct libwebsocket_context *mosq_websockets_init(struct mosquitto__listener *li
 
 	lws_set_log_level(conf->websockets_log_level, log_wrap);
 
-	log__printf(NULL, MOSQ_LOG_INFO, "Opening websockets listen socket on port %d.", listener->port);
+#ifndef WIN32
+	if(listener->use_unixsocket){
+		log__printf(NULL, MOSQ_LOG_INFO, "Opening websockets listen on unix domain socket %s.", listener->host);
+	}
+#else
+	{
+		log__printf(NULL, MOSQ_LOG_INFO, "Opening websockets listen socket on port %d.", listener->port);
+	}
+#endif
 	return libwebsocket_create_context(&info);
 }
 

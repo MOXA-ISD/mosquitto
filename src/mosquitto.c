@@ -287,7 +287,6 @@ int main(int argc, char *argv[])
 	if(rc) return rc;
 	rc = mosquitto_security_init(&int_db, false);
 	if(rc) return rc;
-
 #ifdef WITH_SYS_TREE
 	sys_tree__init(&int_db);
 #endif
@@ -415,7 +414,6 @@ int main(int argc, char *argv[])
 	context__free_disused(&int_db);
 
 	db__close(&int_db);
-
 	if(listensock){
 		for(i=0; i<listensock_count; i++){
 			if(listensock[i] != INVALID_SOCKET){

@@ -31,6 +31,7 @@ Contributors:
 #ifndef WIN32
 #  include <netdb.h>
 #  include <sys/socket.h>
+#  include <unistd.h>
 #else
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
@@ -388,9 +389,9 @@ static void print_usage(void)
 	printf(" -d : put the broker into the background after starting.\n");
 	printf(" -h : display this help.\n");
 	printf(" -p : start the broker listening on the specified port.\n");
-	printf("      Not recommended in conjunction with the -c option.\n");
+	printf("	  Not recommended in conjunction with the -c option.\n");
 	printf(" -v : verbose mode - enable all logging types. This overrides\n");
-	printf("      any logging options given in the config file.\n");
+	printf("	  any logging options given in the config file.\n");
 	printf("\nSee http://mosquitto.org/ for more information.\n\n");
 }
 
@@ -1362,25 +1363,12 @@ int config__read_file_core(struct mosquitto__config *config, bool reload, struct
 					token = strtok_r(NULL, " ", &saveptr);
 					if(token){
 						tmp_int = atoi(token);
-						if(tmp_int < 1 || tmp_int > 65535){
-							log__printf(NULL, MOSQ_LOG_ERR, "Error: Invalid port value (%d).", tmp_int);
-							return MOSQ_ERR_INVAL;
-						}
-
-						if(reload){
-							/* We reload listeners settings based on port number.
-							 * If the port number doesn't already exist, exit with a complaint. */
-							cur_listener = NULL;
-							for(i=0; i<config->listener_count; i++){
-								if(config->listeners[i].port == tmp_int){
-									cur_listener = &config->listeners[i];
-								}
-							}
-							if(!cur_listener){
-								log__printf(NULL, MOSQ_LOG_ERR, "Error: It is not currently possible to add/remove listeners when reloading the config file.");
+#ifndef WIN32	 // Listeners for unix domain socket
+						if(strlen(token) > 5){
+							if(token && !strstr(token, "unix:")) {
+								log__printf(NULL, MOSQ_LOG_ERR, "Error: Invalid listener string.");
 								return MOSQ_ERR_INVAL;
 							}
-						}else{
 							config->listener_count++;
 							config->listeners = mosquitto__realloc(config->listeners, sizeof(struct mosquitto__listener)*config->listener_count);
 							if(!config->listeners){
@@ -1389,23 +1377,61 @@ int config__read_file_core(struct mosquitto__config *config, bool reload, struct
 							}
 							cur_listener = &config->listeners[config->listener_count-1];
 							memset(cur_listener, 0, sizeof(struct mosquitto__listener));
-						}
+							cur_listener->host = mosquitto__strdup(token + sizeof(char) * 5);
+							cur_listener->use_unixsocket = true;
+							cur_listener->security_options.allow_anonymous = -1;
+							cur_listener->security_options.allow_zero_length_clientid = true;
+							cur_listener->protocol = mp_mqtt;
+							cur_listener->port = tmp_int;
+							cur_listener->maximum_qos = 2;
+							cur_listener->max_topic_alias = 10;
+						}else
+#endif
+						{
+							if(tmp_int < 1 || tmp_int > 65535){
+								log__printf(NULL, MOSQ_LOG_ERR, "Error: Invalid port value (%d).", tmp_int);
+								return MOSQ_ERR_INVAL;
+							}
 
-						cur_listener->security_options.allow_anonymous = -1;
-						cur_listener->security_options.allow_zero_length_clientid = true;
-						cur_listener->protocol = mp_mqtt;
-						cur_listener->port = tmp_int;
-						cur_listener->maximum_qos = 2;
-						cur_listener->max_topic_alias = 10;
-						token = strtok_r(NULL, " ", &saveptr);
-						if (token != NULL && token[0] == '#'){
-							token = NULL;
-						}
-						mosquitto__free(cur_listener->host);
-						if(token){
-							cur_listener->host = mosquitto__strdup(token);
-						}else{
-							cur_listener->host = NULL;
+							if(reload){
+								/* We reload listeners settings based on port number.
+								 * If the port number doesn't already exist, exit with a complaint. */
+								cur_listener = NULL;
+								for(i=0; i<config->listener_count; i++){
+									if(config->listeners[i].port == tmp_int){
+										cur_listener = &config->listeners[i];
+									}
+								}
+								if(!cur_listener){
+									log__printf(NULL, MOSQ_LOG_ERR, "Error: It is not currently possible to add/remove listeners when reloading the config file.");
+									return MOSQ_ERR_INVAL;
+								}
+							}else{
+								config->listener_count++;
+								config->listeners = mosquitto__realloc(config->listeners, sizeof(struct mosquitto__listener)*config->listener_count);
+								if(!config->listeners){
+									log__printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
+									return MOSQ_ERR_NOMEM;
+								}
+								cur_listener = &config->listeners[config->listener_count-1];
+								memset(cur_listener, 0, sizeof(struct mosquitto__listener));
+							}
+							cur_listener->security_options.allow_anonymous = -1;
+							cur_listener->security_options.allow_zero_length_clientid = true;
+							cur_listener->protocol = mp_mqtt;
+							cur_listener->port = tmp_int;
+							cur_listener->maximum_qos = 2;
+							cur_listener->max_topic_alias = 10;
+							token = strtok_r(NULL, " ", &saveptr);
+							if (token != NULL && token[0] == '#'){
+								token = NULL;
+							}
+							mosquitto__free(cur_listener->host);
+							if(token){
+								cur_listener->host = mosquitto__strdup(token);
+							}else{
+								cur_listener->host = NULL;
+							}
 						}
 					}else{
 						log__printf(NULL, MOSQ_LOG_ERR, "Error: Empty listener value in configuration.");
@@ -2232,7 +2258,6 @@ int config__read_file(struct mosquitto__config *config, bool reload, const char 
 	rc = config__read_file_core(config, reload, cr, level, lineno, fptr, &buf, &buflen);
 	mosquitto__free(buf);
 	fclose(fptr);
-
 	return rc;
 }
 

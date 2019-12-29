@@ -37,9 +37,6 @@ Contributors:
 #    define libwebsocket_protocols lws_protocols
 #    define libwebsocket_callback_reasons lws_callback_reasons
 #    define libwebsocket lws
-#    if LWS_LIBRARY_VERSION_NUMBER == 3002000
-#      error "libwebsockets 3.2.0 is not compatible with Mosquitto. <3.1.0, or >=3.2.1 will work fine"
-#    endif
 #  else
 #    define lws_pollfd pollfd
 #    define lws_service_fd(A, B) libwebsocket_service_fd((A), (B))
@@ -267,6 +264,9 @@ struct mosquitto__listener {
 	struct libwebsocket_context *ws_context;
 	char *http_dir;
 	struct libwebsocket_protocols *ws_protocol;
+#endif
+#ifndef WIN32
+	bool use_unixsocket;
 #endif
 	struct mosquitto__security_options security_options;
 	struct mosquitto__unpwd *unpwd;
