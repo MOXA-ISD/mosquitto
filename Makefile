@@ -35,7 +35,9 @@ DISTFILES= \
 	pskfile.example \
 	pwfile.example \
 	readme-windows.txt \
-	readme.md
+	readme.md \
+	\
+	debian
 
 .PHONY : all mosquitto api docs binary check clean reallyclean test install uninstall dist sign copy localdocker
 
@@ -103,7 +105,8 @@ dist : reallyclean
 	
 	mkdir -p dist/mosquitto-${VERSION}
 	cp -r ${DISTFILES} dist/mosquitto-${VERSION}/
-	cd dist; tar -zcf mosquitto-${VERSION}.tar.gz mosquitto-${VERSION}/
+	cd dist; tar -zcf mosquitto-${VERSION}.tar.gz mosquitto-${VERSION}/; \
+	cp -a mosquitto-${VERSION}.tar.gz mosquitto_${VERSION}.orig.tar.gz
 
 sign : dist
 	cd dist; gpg --detach-sign -a mosquitto-${VERSION}.tar.gz
