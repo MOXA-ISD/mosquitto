@@ -26,6 +26,7 @@ Contributors:
 #define _GNU_SOURCE
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 #else
 #include <winsock2.h>
@@ -57,7 +58,7 @@ Contributors:
 #ifdef WITH_BROKER
 #  include "mosquitto_broker_internal.h"
 #  ifdef WITH_WEBSOCKETS
-#    include <libwebsockets.h>
+#include <libwebsockets.h>
 #  endif
 #else
 #  include "read_handle.h"
@@ -161,9 +162,9 @@ void net__cleanup(void)
 	ERR_remove_thread_state(NULL);
 	EVP_cleanup();
 
-#    if !defined(OPENSSL_NO_ENGINE)
+#if !defined(OPENSSL_NO_ENGINE)
 	ENGINE_cleanup();
-#    endif
+#endif
 #  endif
 
 	CONF_modules_unload(1);
@@ -376,86 +377,120 @@ int net__try_connect(const char *host, uint16_t port, mosq_sock_t *sock, const c
 #endif
 
 	*sock = INVALID_SOCKET;
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-
-	s = getaddrinfo(host, NULL, &hints, &ainfo);
-	if(s){
-		errno = s;
-		return MOSQ_ERR_EAI;
-	}
-
-	if(bind_address){
-		s = getaddrinfo(bind_address, NULL, &hints, &ainfo_bind);
-		if(s){
-			freeaddrinfo(ainfo);
-			errno = s;
+#ifndef WIN32
+	struct sockaddr_un srv_addr;
+	if(host && strlen(host) > 0 && port == 0) {
+		*sock = socket(PF_UNIX,SOCK_STREAM, 0);
+		if(*sock == INVALID_SOCKET) {
 			return MOSQ_ERR_EAI;
 		}
-	}
-
-	for(rp = ainfo; rp != NULL; rp = rp->ai_next){
-		*sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-		if(*sock == INVALID_SOCKET) continue;
-
-		if(rp->ai_family == AF_INET){
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(port);
-		}else if(rp->ai_family == AF_INET6){
-			((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(port);
-		}else{
-			COMPAT_CLOSE(*sock);
-			*sock = INVALID_SOCKET;
-			continue;
-		}
-
-		if(bind_address){
-			for(rp_bind = ainfo_bind; rp_bind != NULL; rp_bind = rp_bind->ai_next){
-				if(bind(*sock, rp_bind->ai_addr, rp_bind->ai_addrlen) == 0){
-					break;
-				}
-			}
-			if(!rp_bind){
-				COMPAT_CLOSE(*sock);
-				*sock = INVALID_SOCKET;
-				continue;
-			}
-		}
-
-		if(!blocking){
-			/* Set non-blocking */
-			if(net__socket_nonblock(sock)){
-				continue;
-			}
-		}
-
-		rc = connect(*sock, rp->ai_addr, rp->ai_addrlen);
-#ifdef WIN32
-		errno = WSAGetLastError();
-#endif
+		srv_addr.sun_family = AF_UNIX;
+		strcpy(srv_addr.sun_path, host);
+		//connect server
+		rc = connect(*sock, (struct sockaddr*)&srv_addr, sizeof(srv_addr));
 		if(rc == 0 || errno == EINPROGRESS || errno == COMPAT_EWOULDBLOCK){
 			if(rc < 0 && (errno == EINPROGRESS || errno == COMPAT_EWOULDBLOCK)){
+				printf("failed to connect....\n");
 				rc = MOSQ_ERR_CONN_PENDING;
 			}
 
 			if(blocking){
 				/* Set non-blocking */
 				if(net__socket_nonblock(sock)){
-					continue;
+					COMPAT_CLOSE(*sock);
+					*sock = INVALID_SOCKET;
+					return MOSQ_ERR_ERRNO;
 				}
 			}
-			break;
+			return rc;
 		}
-
 		COMPAT_CLOSE(*sock);
 		*sock = INVALID_SOCKET;
 	}
-	freeaddrinfo(ainfo);
-	if(bind_address){
-		freeaddrinfo(ainfo_bind);
-	}
-	if(!rp){
-		return MOSQ_ERR_ERRNO;
+	else
+#endif
+	{
+		memset(&hints, 0, sizeof(struct addrinfo));
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = SOCK_STREAM;
+
+		s = getaddrinfo(host, NULL, &hints, &ainfo);
+		if(s){
+			errno = s;
+			return MOSQ_ERR_EAI;
+		}
+
+		if(bind_address){
+			s = getaddrinfo(bind_address, NULL, &hints, &ainfo_bind);
+			if(s){
+				freeaddrinfo(ainfo);
+				errno = s;
+				return MOSQ_ERR_EAI;
+			}
+		}
+
+		for(rp = ainfo; rp != NULL; rp = rp->ai_next){
+			*sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+			if(*sock == INVALID_SOCKET) continue;
+
+			if(rp->ai_family == AF_INET){
+				((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(port);
+			}else if(rp->ai_family == AF_INET6){
+				((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(port);
+			}else{
+				COMPAT_CLOSE(*sock);
+				*sock = INVALID_SOCKET;
+				continue;
+			}
+
+			if(bind_address){
+				for(rp_bind = ainfo_bind; rp_bind != NULL; rp_bind = rp_bind->ai_next){
+					if(bind(*sock, rp_bind->ai_addr, rp_bind->ai_addrlen) == 0){
+						break;
+					}
+				}
+				if(!rp_bind){
+					COMPAT_CLOSE(*sock);
+					*sock = INVALID_SOCKET;
+					continue;
+				}
+			}
+
+			if(!blocking){
+				/* Set non-blocking */
+				if(net__socket_nonblock(sock)){
+					continue;
+				}
+			}
+
+			rc = connect(*sock, rp->ai_addr, rp->ai_addrlen);
+#ifdef WIN32
+			errno = WSAGetLastError();
+#endif
+			if(rc == 0 || errno == EINPROGRESS || errno == COMPAT_EWOULDBLOCK){
+				if(rc < 0 && (errno == EINPROGRESS || errno == COMPAT_EWOULDBLOCK)){
+					rc = MOSQ_ERR_CONN_PENDING;
+				}
+
+				if(blocking){
+					/* Set non-blocking */
+					if(net__socket_nonblock(sock)){
+						continue;
+					}
+				}
+				break;
+			}
+
+			COMPAT_CLOSE(*sock);
+			*sock = INVALID_SOCKET;
+		}
+		freeaddrinfo(ainfo);
+		if(bind_address){
+			freeaddrinfo(ainfo_bind);
+		}
+		if(!rp){
+			return MOSQ_ERR_ERRNO;
+		}
 	}
 	return rc;
 }
@@ -827,7 +862,8 @@ int net__socket_connect(struct mosquitto *mosq, const char *host, uint16_t port,
 	mosq_sock_t sock = INVALID_SOCKET;
 	int rc, rc2;
 
-	if(!mosq || !host || !port) return MOSQ_ERR_INVAL;
+	//justin: remove !port
+	if(!mosq || !host) return MOSQ_ERR_INVAL;
 
 	rc = net__try_connect(host, port, &sock, bind_address, blocking);
 	if(rc > 0) return rc;

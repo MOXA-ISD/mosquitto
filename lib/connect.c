@@ -42,7 +42,8 @@ static int mosquitto__connect_init(struct mosquitto *mosq, const char *host, int
 	int rc;
 
 	if(!mosq) return MOSQ_ERR_INVAL;
-	if(!host || port <= 0) return MOSQ_ERR_INVAL;
+	// justin: port <= 0 -> port < 0
+	if(!host || port < 0) return MOSQ_ERR_INVAL;
 
 	if(mosq->id == NULL && (mosq->protocol == mosq_p_mqtt31 || mosq->protocol == mosq_p_mqtt311)){
 		mosq->id = (char *)mosquitto__calloc(24, sizeof(char));
@@ -120,7 +121,6 @@ int mosquitto_connect_bind_v5(struct mosquitto *mosq, const char *host, int port
 	if(rc) return rc;
 
 	mosquitto__set_state(mosq, mosq_cs_new);
-
 	return mosquitto__reconnect(mosq, true, properties);
 }
 
@@ -159,7 +159,8 @@ static int mosquitto__reconnect(struct mosquitto *mosq, bool blocking, const mos
 	int rc;
 
 	if(!mosq) return MOSQ_ERR_INVAL;
-	if(!mosq->host || mosq->port <= 0) return MOSQ_ERR_INVAL;
+	// justin: port <= 0 -> port < 0
+	if(!mosq->host || mosq->port < 0) return MOSQ_ERR_INVAL;
 	if(mosq->protocol != mosq_p_mqtt5 && properties) return MOSQ_ERR_NOT_SUPPORTED;
 
 	if(properties){
@@ -189,8 +190,8 @@ static int mosquitto__reconnect(struct mosquitto *mosq, bool blocking, const mos
 	message__reconnect_reset(mosq);
 
 	if(mosq->sock != INVALID_SOCKET){
-        net__socket_close(mosq); //close socket
-    }
+		net__socket_close(mosq); //close socket
+	}
 
 #ifdef WITH_SOCKS
 	if(mosq->socks5_host){

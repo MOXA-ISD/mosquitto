@@ -46,7 +46,7 @@ int send__connect(struct mosquitto *mosq, uint16_t keepalive, bool clean_session
 	uint16_t receive_maximum;
 
 	assert(mosq);
-
+	// justin: print return code
 	if(mosq->protocol == mosq_p_mqtt31 && !mosq->id) return MOSQ_ERR_PROTOCOL;
 
 #if defined(WITH_BROKER) && defined(WITH_BRIDGE)
@@ -64,7 +64,6 @@ int send__connect(struct mosquitto *mosq, uint16_t keepalive, bool clean_session
 	username = mosq->username;
 	password = mosq->password;
 #endif
-
 	if(mosq->protocol == mosq_p_mqtt5){
 		/* Generate properties from options */
 		if(!mosquitto_property_read_int16(properties, MQTT_PROP_RECEIVE_MAXIMUM, &receive_maximum, false)){
