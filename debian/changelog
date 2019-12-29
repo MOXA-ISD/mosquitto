@@ -1,3 +1,9 @@
+mosquitto (1.6.8-1+un1) unstable; urgency=medium
+
+  * feat: support unix domain socket
+
+ -- Justin Tung <justincp.tung@moxa.com>  Sun, 29 Dec 2019 19:09:22 +0800
+
 mosquitto (1.6.8-1) unstable; urgency=medium
 
   * New upstream release.
