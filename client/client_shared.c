@@ -742,7 +742,7 @@ int client_config_line_proc(struct mosq_config *cfg, int pub_or_sub, int argc, c
 				return 1;
 			}else{
 				cfg->port = atoi(argv[i+1]);
-				if(cfg->port<1 || cfg->port>65535){
+				if(cfg->port<0 || cfg->port>65535){
 					fprintf(stderr, "Error: Invalid port given: %d\n", cfg->port);
 					return 1;
 				}
